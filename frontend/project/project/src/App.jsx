@@ -1,32 +1,23 @@
 import React from 'react';
-import { Wallet, TrendingUp, Shield } from 'lucide-react';
-import VisionMission from './components/VisionMission';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
-import Header from './components/Header';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
-import SignUp from './components/Auth/SignUp';
-import UserDashboard from './components/Dashboard/UserDashboard';
+import Header from './components/Header';
+import VisionMission from './components/VisionMission';
 
 function App() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const AppContent = () => {
-    const { user } = useAuth();
-    return user ? <UserDashboard /> : <SignUp />;
-  };
-  
-  function App() {
-    return (
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    );
-  }
+  // Redirect to dashboard if user is already logged in
+  React.useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+
   return (
     <div className="min-h-screen bg-black text-white">
       <Header />
-
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div className="container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center">
@@ -40,20 +31,23 @@ function App() {
               Store, send, receive, and trade cryptocurrencies with advanced fraud detection powered by machine learning and secured by blockchain technology.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to="/signup" className="bg-white hover:bg-gray-100 text-black px-6 py-3 rounded-full flex items-center">
+              <button 
+                onClick={() => navigate('/signup')} 
+                className="bg-white hover:bg-gray-100 text-black px-6 py-3 rounded-full flex items-center"
+              >
                 Sign Up
-              </Link>
-              <Link to="/login" className="border border-white hover:bg-white/10 text-white px-6 py-3 rounded-full flex items-center transition-colors">
+              </button>
+              <button 
+                onClick={() => navigate('/login')} 
+                className="border border-white hover:bg-white/10 text-white px-6 py-3 rounded-full flex items-center transition-colors"
+              >
                 Login
-              </Link>
+              </button>
             </div>
           </div>
         </div>
       </section>
-
-      {/* Vision and Mission Section */}
       <VisionMission />
-
       {/* Footer */}
       <footer className="bg-gray-900 py-12">
         <div className="container mx-auto px-4">

@@ -1,30 +1,50 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import { Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, Settings, LogOut } from "lucide-react";
-
+import { useNavigate } from "react-router-dom";
+import { Wallet, Settings, LogOut, History, Shield, AlertTriangle, CheckCircle, Activity, Clock, TrendingUp, AlertOctagon } from "lucide-react";
+import axios from "axios";
 
 const UserDashboard = () => {
   const { user, signOut } = useAuth();
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [balance, setBalance] = useState("0.00");
-  const [transactions] = useState([
-    { id: 1, type: "received", amount: "2,500.00", from: "John Doe", date: "2025-03-04" },
-    { id: 2, type: "sent", amount: "1,200.00", to: "Jane Smith", date: "2025-03-03" },
-  ]);
+  const navigate = useNavigate();
+  const [prediction, setPrediction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [recipientAddress, setRecipientAddress] = useState("");
+  const [error, setError] = useState(null);
 
-  // Function to connect to MetaMask
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      alert("MetaMask is not installed! Please install it to continue.");
-      return;
-    }
-
+  const handlePrediction = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      setWalletAddress(accounts[0]); // Store the connected wallet address
+      const response = await axios.post('http://localhost:4000/api/predict', {
+        amount: parseFloat(amount),
+        recipientAddress: recipientAddress,
+      });
+
+      setPrediction(response.data);
     } catch (error) {
-      console.error("Wallet connection failed:", error);
+      console.error('Prediction error:', error);
+      setError(error.response?.data?.message || "Failed to get prediction");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const getRiskLevelColor = (level) => {
+    const colors = {
+      Low: "text-green-500",
+      Medium: "text-yellow-500",
+      High: "text-red-500"
+    };
+    return colors[level] || "text-gray-500";
+  };
+
+  const getMetricColor = (value, threshold) => {
+    if (value > threshold.high) return "text-red-500";
+    if (value > threshold.medium) return "text-yellow-500";
+    return "text-green-500";
   };
 
   return (
@@ -51,72 +71,141 @@ const UserDashboard = () => {
       <main className="pt-20 pb-8 px-4">
         <div className="container mx-auto">
           <div className="grid gap-6 md:grid-cols-12">
-            {/* Left Section */}
+            {/* Left Section - ML Predictor */}
             <div className="md:col-span-8 space-y-6">
               <div className="bg-gray-900 rounded-xl p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-sm text-gray-400">Total Balance</h2>
-                    <p className="text-3xl font-bold text-white">${balance}</p>
-                  </div>
-                  <button className="p-2 hover:bg-gray-800 rounded-lg">
-                    <RefreshCw className="h-5 w-5 text-white" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <button className="flex items-center justify-center space-x-2 bg-red-500 hover:bg-red-600 text-white p-3 rounded-lg transition-colors">
-                    <ArrowUpRight className="h-5 w-5" />
-                    <span>Send</span>
-                  </button>
-                  <button className="flex items-center justify-center space-x-2 bg-gray-800 hover:bg-gray-700 p-3 rounded-lg transition-colors">
-                    <ArrowDownRight className="h-5 w-5 text-white" />
-                    <span>Receive</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* MetaMask Wallet Section */}
-              <div className="bg-gray-900 rounded-xl p-6">
-                <h2 className="text-xl font-bold text-white mb-4">Wallet Connection</h2>
-                {walletAddress ? (
-                  <p className="text-green-400">Connected: {walletAddress}</p>
-                ) : (
-                  <button
-                    onClick={connectWallet}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition"
-                  >
-                    Connect Wallet
-                  </button>
-                )}
-              </div>
-
-              {/* Recent Transactions */}
-              <div className="bg-gray-900 rounded-xl p-6">
-                <h2 className="text-xl font-bold text-white mb-4">Recent Transactions</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">Transaction Risk Predictor</h2>
+                
                 <div className="space-y-4">
-                  {transactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div
-                          className={`p-2 rounded-full ${
-                            transaction.type === "received" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-500"
-                          }`}
-                        >
-                          {transaction.type === "received" ? <ArrowDownRight className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-800 p-4 rounded-lg">
+                      <label className="block text-sm text-gray-400 mb-2">Amount</label>
+                      <input 
+                        type="number" 
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full bg-gray-700 text-white rounded-lg px-4 py-2"
+                        placeholder="Enter amount"
+                      />
+                    </div>
+                    <div className="bg-gray-800 p-4 rounded-lg">
+                      <label className="block text-sm text-gray-400 mb-2">Recipient Address</label>
+                      <input 
+                        type="text"
+                        value={recipientAddress}
+                        onChange={(e) => setRecipientAddress(e.target.value)}
+                        className="w-full bg-gray-700 text-white rounded-lg px-4 py-2"
+                        placeholder="Enter recipient address"
+                      />
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handlePrediction}
+                    disabled={loading || !amount || !recipientAddress}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {loading ? 'Analyzing...' : 'Predict Risk'}
+                  </button>
+
+                  {error && (
+                    <div className="bg-red-900/50 border border-red-500 p-4 rounded-lg flex items-start space-x-2">
+                      <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-red-200">{error}</p>
+                    </div>
+                  )}
+
+                  {prediction && (
+                    <div className="space-y-6">
+                      {/* Main Risk Assessment */}
+                      <div className="bg-gray-800 p-6 rounded-lg">
+                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                          <span>Risk Assessment</span>
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="bg-gray-900/50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-400 mb-1">Risk Level</p>
+                            <p className={`text-lg font-semibold ${getRiskLevelColor(prediction.riskLevel)}`}>
+                              {prediction.riskLevel}
+                            </p>
+                          </div>
+                          <div className="bg-gray-900/50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-400 mb-1">Confidence</p>
+                            <p className="text-lg font-semibold text-blue-400">
+                              {prediction.confidence}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-white">
-                            {transaction.type === "received" ? "Received from" : "Sent to"}
-                          </p>
-                          <p className="text-sm text-gray-400">{transaction.type === "received" ? transaction.from : transaction.to}</p>
+                        <div className="bg-gray-900/50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-400 mb-2">Transaction Category</p>
+                          <p className="text-white">{prediction.transactionCategory}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">${transaction.amount}</p>
-                        <p className="text-sm text-gray-400">{transaction.date}</p>
+
+                      {/* Detailed Metrics */}
+                      <div className="bg-gray-800 p-6 rounded-lg">
+                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                          <Activity className="h-5 w-5 text-blue-500" />
+                          <span>Transaction Metrics</span>
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-900/50 p-4 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-gray-400">Velocity Score</p>
+                              <Clock className="h-4 w-4 text-blue-400" />
+                            </div>
+                            <p className={`text-lg font-semibold ${getMetricColor(prediction.analysisMetrics.velocityScore, { medium: 3, high: 5 })}`}>
+                              {prediction.analysisMetrics.velocityScore} tx/day
+                            </p>
+                          </div>
+                          <div className="bg-gray-900/50 p-4 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-gray-400">Amount Deviation</p>
+                              <TrendingUp className="h-4 w-4 text-blue-400" />
+                            </div>
+                            <p className={`text-lg font-semibold ${getMetricColor(prediction.analysisMetrics.amountDeviation, { medium: 0.5, high: 1 })}`}>
+                              {(prediction.analysisMetrics.amountDeviation * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Risk Factors */}
+                      {prediction.riskFactors.length > 0 && (
+                        <div className="bg-gray-800 p-6 rounded-lg">
+                          <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                            <AlertOctagon className="h-5 w-5 text-yellow-500" />
+                            <span>Risk Factors</span>
+                          </h3>
+                          <ul className="space-y-2">
+                            {prediction.riskFactors.map((factor, index) => (
+                              <li key={index} className="flex items-start space-x-2">
+                                <AlertTriangle className="h-4 w-4 text-yellow-500 mt-1 flex-shrink-0" />
+                                <span className="text-gray-300">{factor}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Security Recommendations */}
+                      <div className="bg-gray-800 p-6 rounded-lg">
+                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                          <Shield className="h-5 w-5 text-green-500" />
+                          <span>Security Recommendations</span>
+                        </h3>
+                        <ul className="space-y-2">
+                          {prediction.securitySuggestions.map((suggestion, index) => (
+                            <li key={index} className="flex items-start space-x-2">
+                              <CheckCircle className="h-4 w-4 text-green-500 mt-1 flex-shrink-0" />
+                              <span className="text-gray-300">{suggestion}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
@@ -137,13 +226,20 @@ const UserDashboard = () => {
               <div className="bg-gray-900 rounded-xl p-6">
                 <h3 className="font-bold text-white mb-4">Quick Actions</h3>
                 <div className="space-y-2">
-                  <button className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-white">
-                    View Transaction History
+                  <button 
+                    onClick={() => navigate('/transaction-history')}
+                    className="w-full flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-white"
+                  >
+                    <History className="h-5 w-5" />
+                    <span>Transaction History</span>
                   </button>
-                  <button className="w-full text-left px-4 py-2 rounded-lg hoverbg-gray-800 transition-colors text-white">
-                    Security Settings
+                  <button 
+                    onClick={() => navigate('/security-settings')}
+                    className="w-full flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-white"
+                  >
+                    <Shield className="h-5 w-5" />
+                    <span>Security Settings</span>
                   </button>
-                  
                 </div>
               </div>
             </div>

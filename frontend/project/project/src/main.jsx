@@ -8,6 +8,7 @@ import Pricing from './pages/Pricing.jsx';
 import Contact from './pages/Contact.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import UserDashboard from './components/Dashboard/UserDashboard';
+import TransactionHistory from './components/Dashboard/TransactionHistory';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import './index.css';
 
@@ -26,6 +27,14 @@ createRoot(document.getElementById('root')).render(
             element={
               <ProtectedRoute>
                 <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transaction-history"
+            element={
+              <ProtectedRoute>
+                <TransactionHistory />
               </ProtectedRoute>
             }
           />

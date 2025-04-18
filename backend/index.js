@@ -5,13 +5,18 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
 const cors = require("cors");
+const axios = require("axios");
+const blockchainService = require("./services/blockchainService");
+require('dotenv').config();
 const port = process.env.PORT || 4000;
 
 app.use(express.json());
 app.use(cors());
 
 // Database Connection With MongoDB
-mongoose.connect("mongodb+srv://harshhledwanii:wiskii123@cluster0.uu7wk.mongodb.net/e-commerce");
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("Connected to MongoDB"))
+  .catch(err => console.error("MongoDB connection error:", err));
 
 const storage = multer.diskStorage({
   destination: './upload/images',
@@ -69,6 +74,31 @@ const Product = mongoose.model("Product", {
   old_price: { type: Number },
   date: { type: Date, default: Date.now },
   avilable: { type: Boolean, default: true },
+});
+
+
+// Schema for Transaction Risk Analysis
+const TransactionRisk = mongoose.model("TransactionRisk", {
+  amount: { type: Number, required: true },
+  recipientAddress: { type: String, required: true },
+  riskLevel: { type: String, required: true },
+  confidence: { type: String, required: true },
+  details: { type: String },
+  recommendations: [String],
+  timestamp: { type: Date, default: Date.now },
+  mlPrediction: { type: Number },
+  individualPredictions: { type: Array },
+  analysisMetrics: {
+    velocityScore: { type: Number },
+    frequencyScore: { type: Number },
+    amountDeviation: { type: Number },
+    historicalRiskScore: { type: Number },
+    patternMatch: { type: String },
+    timeBasedRisk: { type: Number }
+  },
+  riskFactors: [String],
+  securitySuggestions: [String],
+  transactionCategory: { type: String }
 });
 
 
@@ -233,6 +263,162 @@ app.post("/removeproduct", async (req, res) => {
   await Product.findOneAndDelete({ id: req.body.id });
   console.log("Removed");
   res.json({ success: true, name: req.body.name })
+});
+
+// ML Prediction Endpoint
+app.post("/api/predict", async (req, res) => {
+  try {
+    const { amount, recipientAddress } = req.body;
+
+    if (!amount || !recipientAddress) {
+      return res.status(400).json({ 
+        message: "Amount and recipient address are required" 
+      });
+    }
+
+    // Forward the request to the ML service
+    try {
+      const mlResponse = await axios.post('http://localhost:8000/predict', {
+        amount: parseFloat(amount),
+        recipientAddress
+      });
+
+      // Get the prediction data
+      const predictionData = mlResponse.data;
+
+      // Store the prediction in database
+      const prediction = new TransactionRisk({
+        amount,
+        recipientAddress,
+        riskLevel: predictionData.riskLevel,
+        confidence: predictionData.confidence,
+        details: predictionData.details,
+        recommendations: predictionData.securitySuggestions,
+        mlPrediction: predictionData.analysisMetrics.historicalRiskScore,
+        analysisMetrics: predictionData.analysisMetrics,
+        riskFactors: predictionData.riskFactors,
+        securitySuggestions: predictionData.securitySuggestions,
+        transactionCategory: predictionData.transactionCategory
+      });
+
+      await prediction.save();
+
+      // Send the prediction response to frontend
+      res.json(predictionData);
+
+    } catch (mlError) {
+      console.error("ML Service Error:", mlError.message);
+      res.status(500).json({ 
+        message: "Error connecting to ML service. Please try again." 
+      });
+    }
+
+  } catch (error) {
+    console.error("Prediction error:", error);
+    res.status(500).json({ 
+      message: "Error processing prediction request",
+      error: error.message 
+    });
+  }
+});
+
+// Helper function to determine transaction pattern
+function determineTransactionPattern(amount, velocity, timeOfDay) {
+  if (velocity === 0) return "First transaction of the day";
+  if (velocity > 5) return "High-frequency trading pattern";
+  if (amount > 1000000) return "Large-value transaction pattern";
+  if (timeOfDay >= 9 && timeOfDay <= 17) return "Normal business hours pattern";
+  return "Standard transaction pattern";
+}
+
+// Helper function to calculate historical risk
+function calculateHistoricalRisk(recentTransactions) {
+  if (recentTransactions.length === 0) return 0.5;
+  
+  const highRiskCount = recentTransactions.filter(tx => tx.riskLevel === "High").length;
+  const mediumRiskCount = recentTransactions.filter(tx => tx.riskLevel === "Medium").length;
+  
+  return (highRiskCount * 1 + mediumRiskCount * 0.5) / recentTransactions.length;
+}
+
+// Update the transaction route to use smart contract
+app.post("/api/transactions", async (req, res) => {
+    try {
+        const { amount, recipientAddress, userId } = req.body;
+
+        // Get risk assessment from ML service
+        const mlResponse = await axios.post("http://localhost:8000/predict", {
+            amount,
+            recipientAddress
+        });
+
+        const { riskLevel } = mlResponse.data;
+
+        // Validate transaction on blockchain
+        const blockchainResult = await blockchainService.validateTransaction(
+            amount,
+            recipientAddress,
+            riskLevel,
+            process.env.PRIVATE_KEY // Store this securely in environment variables
+        );
+
+        if (!blockchainResult.success) {
+            return res.status(400).json({
+                success: false,
+                error: "Transaction validation failed on blockchain"
+            });
+        }
+
+        // Save to MongoDB
+        const transaction = new Transaction({
+            userId,
+            amount,
+            recipientAddress,
+            riskLevel,
+            blockchainHash: blockchainResult.transactionHash,
+            timestamp: new Date()
+        });
+
+        await transaction.save();
+
+        res.json({
+            success: true,
+            transaction,
+            blockchainHash: blockchainResult.transactionHash
+        });
+    } catch (error) {
+        console.error("Error processing transaction:", error);
+        res.status(500).json({
+            success: false,
+            error: "Error processing transaction"
+        });
+    }
+});
+
+// Add route to get transaction history from blockchain
+app.get("/api/transactions/history/:userAddress", async (req, res) => {
+    try {
+        const { userAddress } = req.params;
+        const result = await blockchainService.getTransactionHistory(userAddress);
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                error: "Error fetching transaction history"
+            });
+        }
+
+        res.json({
+            success: true,
+            transactions: result.transactions
+        });
+    } catch (error) {
+        console.error("Error fetching transaction history:", error);
+        res.status(500).json({
+            success: false,
+            error: "Error fetching transaction history"
+        });
+    }
 });
 
 // Starting Express Server
